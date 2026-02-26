@@ -36,6 +36,8 @@ When creating a branch for your changes, use prefixes to indicate the type of wo
   Example: `bugfix/cursor-update`
 - `doc/` for documentation changes  
   Example: `doc/README-update`
+- `refactor/` for refactoring
+  Example: `refactor/kernel.c-refactor`
 
 This helps keep the repository organized and makes it easier to review PRs.
 
