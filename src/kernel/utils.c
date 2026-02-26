@@ -65,6 +65,19 @@ void enable_hw_cursor(uint8_t start, uint8_t end) {
   update_hw_cursor();
 }
 
+/**
+ * Scroll the screen up by one row
+ */
+void scroll(void) {
+  for (int i = 0; i < 80 * 24; i++) {
+    vga[i] = vga[i + 80];
+  }
+  for (int i = 80 * 24; i < 80 * 25; i++) {
+    vga[i] = (color << 8) | ' ';
+  }
+  cursor -= 80;
+}
+
 //-----------------------------------------
 // Text Output Functions
 //-----------------------------------------
@@ -79,6 +92,11 @@ void putchar(unsigned char c) {
     vga[cursor] = (color << 8) | c;
     cursor++;
   }
+  
+  if (cursor >= 80 * 25) {
+    scroll();
+  }
+
   update_hw_cursor();
 }
 
