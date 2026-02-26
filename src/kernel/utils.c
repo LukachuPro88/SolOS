@@ -68,7 +68,7 @@ void enable_hw_cursor(uint8_t start, uint8_t end) {
 /**
  * Scroll the screen up by one row
  */
-void scroll(void) {
+static void scroll(void) {
   for (int i = 0; i < 80 * 24; i++) {
     vga[i] = vga[i + 80];
   }
