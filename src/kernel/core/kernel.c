@@ -13,7 +13,7 @@
 //-----------------------------------------
 
 #include "headers/shell.h"
-#include "headers/utils.h"
+#include "headers/vga.h"
 
 void kernel_main(void) {
   clear_screen();

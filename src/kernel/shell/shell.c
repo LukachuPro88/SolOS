@@ -14,6 +14,7 @@
 
 #include "headers/shell.h"
 #include "headers/utils.h"
+#include "headers/vga.h"
 #include <stdint.h>
 
 //-----------------------------------------
