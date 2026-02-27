@@ -8,7 +8,7 @@
 
 //-----------------------------------------
 // kernel/shell.c
-// Simple kernel shell for SolOS
+// Kernel shell for SolOS
 // Handles keyboard input, commands, and basic output
 //-----------------------------------------
 
@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 
+#include "headers/keyboard.h"
 #include "headers/utils.h"
 #include "headers/vga.h"
 
@@ -24,6 +25,14 @@
 //-----------------------------------------
 static char input_buf[256];
 static int input_len = 0;
+
+// Command history
+static char history[8][256];
+static int history_len = 0;
+static int history_index = -1;
+
+// Cursor position within input buffer
+static int input_cursor = 0;
 
 // Standard US keyboard mappings
 static const unsigned char sc_ascii_lower[] = {
@@ -88,15 +97,29 @@ static Joke jokes[] = {
 //-----------------------------------------
 // Internal helpers
 //-----------------------------------------
-static unsigned char read_char(void);
+static uint16_t read_key(void);
 static int is_write_command(const char* input);
 static void parse_input(void);
+static void redraw_input(int prompt_cursor);
+
+//-----------------------------------------
+// Redraw input line (used after history navigation / left-right cursor)
+//-----------------------------------------
+static void redraw_input(int prompt_cursor) {
+  cursor = prompt_cursor;
+  for (int i = 0; i < input_len; i++) putchar((unsigned char)input_buf[i]);
+  vga[prompt_cursor + input_len] = (color << 8) | ' ';
+  cursor = prompt_cursor + input_cursor;
+  update_hw_cursor();
+}
 
 //-----------------------------------------
 // Commands
 //-----------------------------------------
 static void cmd_help(void) {
-  print("\nCommands: help, clear, hello, about, joke, settings, write, shutdown\n");
+  print(
+      "\nCommands: help, clear, hello, about, joke, settings, write, "
+      "shutdown\n");
 }
 static void cmd_clear(void) { clear_screen(); }
 static void cmd_hello(void) { print("\nHello from SolOS!\n"); }
@@ -117,16 +140,16 @@ static void cmd_settings(void) {
   print("\nPress c to cycle layout, q to quit\n");
 
   while (1) {
-    unsigned char c = read_char();
-    if (!c) continue;
+    uint16_t key = read_key();
+    if (!key) continue;
 
-    if (c == 'c') {
+    if (key == 'c') {
       current_layout = (current_layout + 1) % 2;
       clear_screen();
       print("KEYBOARD LAYOUT: ");
       print(layouts[current_layout].name);
       print("\nPress c to cycle layout, q to quit\n");
-    } else if (c == 'q') {
+    } else if (key == 'q') {
       clear_screen();
       break;
     }
@@ -143,7 +166,6 @@ static void cmd_write(void) {
   }
   p++;
   const char* message_start = p;
-
   while (*p && *p != '"') p++;
   if (*p != '"') {
     print(usage);
@@ -167,7 +189,6 @@ static void cmd_shutdown(void) {
   outw(0x604, 0x2000);
 }
 
-// Command struct
 typedef struct {
   const char* name;
   void (*handler)(void);
@@ -178,7 +199,6 @@ static Command commands[] = {{"help", cmd_help},   {"clear", cmd_clear},
                              {"joke", cmd_joke},   {"settings", cmd_settings},
                              {"write", cmd_write}, {"shutdown", cmd_shutdown}};
 
-// Check if command is write
 static int is_write_command(const char* input) {
   return input[0] == 'w' && input[1] == 'r' && input[2] == 'i' &&
          input[3] == 't' && input[4] == 'e' &&
@@ -189,6 +209,12 @@ static int is_write_command(const char* input) {
 // Input parsing
 //-----------------------------------------
 static void parse_input(void) {
+  // Save to history
+  if (input_len > 0 && history_len < 8) {
+    for (int i = 0; i <= input_len; i++) history[history_len][i] = input_buf[i];
+    history_len++;
+  }
+
   if (is_write_command(input_buf)) {
     cmd_write();
     return;
@@ -210,63 +236,94 @@ static void parse_input(void) {
 }
 
 //-----------------------------------------
-// Keyboard reading
+// Keyboard reading — now delegates to driver
 //-----------------------------------------
-static unsigned char read_char(void) {
-  static uint8_t shift = 0;
-  uint8_t sc, status;
-
-  while (1) {
-    __asm__ volatile("inb $0x64, %0" : "=a"(status));
-    if (status & 0x01) break;
-  }
-
-  __asm__ volatile("inb $0x60, %0" : "=a"(sc));
-
-  // Shift press/release handling
-  if (sc == 0x2A || sc == 0x36) {
-    shift = 1;
-    return 0;
-  }
-  if (sc == 0xAA || sc == 0xB6) {
-    shift = 0;
-    return 0;
-  }
-  if (sc & 0x80) return 0;
-
-  if (sc < sizeof(sc_ascii_lower)) {
-    return shift ? layouts[current_layout].upper[sc]
-                 : layouts[current_layout].lower[sc];
-  }
-  return 0;
+static uint16_t read_key(void) {
+  uint8_t sc = keyboard_read_scancode();
+  return keyboard_handle_scancode(sc, layouts[current_layout].lower,
+                                  layouts[current_layout].upper);
 }
 
 //-----------------------------------------
 // Shell prompt
-
 //-----------------------------------------
 void shell_prompt(void) {
   print("\nSolOS> ");
   input_len = 0;
+  input_cursor = 0;
+  history_index = -1;
   int prompt_cursor = cursor;
 
   while (1) {
-    unsigned char c = read_char();
-    if (!c) continue;
+    uint16_t key = read_key();
+    if (!key) continue;
 
-    if (c == '\n') {
+    if (key == SPECIAL_UP) {
+      // Navigate history backwards
+      if (history_len == 0) continue;
+      if (history_index < history_len - 1) history_index++;
+      for (int i = 0; history[history_len - 1 - history_index][i]; i++)
+        input_buf[i] = history[history_len - 1 - history_index][i];
+      input_len = 0;
+      while (input_buf[input_len]) input_len++;
+      input_cursor = input_len;
+      redraw_input(prompt_cursor);
+
+    } else if (key == SPECIAL_DOWN) {
+      // Navigate history forwards
+      if (history_index <= 0) {
+        history_index = -1;
+        input_len = 0;
+        input_cursor = 0;
+        input_buf[0] = '\0';
+        redraw_input(prompt_cursor);
+        continue;
+      }
+      history_index--;
+      for (int i = 0; history[history_len - 1 - history_index][i]; i++)
+        input_buf[i] = history[history_len - 1 - history_index][i];
+      input_len = 0;
+      while (input_buf[input_len]) input_len++;
+      input_cursor = input_len;
+      redraw_input(prompt_cursor);
+
+    } else if (key == SPECIAL_LEFT) {
+      if (input_cursor > 0) {
+        input_cursor--;
+        cursor--;
+        update_hw_cursor();
+      }
+
+    } else if (key == SPECIAL_RIGHT) {
+      if (input_cursor < input_len) {
+        input_cursor++;
+        cursor++;
+        update_hw_cursor();
+      }
+
+    } else if (key == '\n') {
       input_buf[input_len] = '\0';
+      print("\n");
       parse_input();
       return;
-    } else if (c == '\b') {
-      if (input_len > 0 && cursor > prompt_cursor) {
+
+    } else if (key == '\b') {
+      if (input_cursor > 0 && cursor > prompt_cursor) {
+        for (int i = input_cursor - 1; i < input_len - 1; i++)
+          input_buf[i] = input_buf[i + 1];
         input_len--;
+        input_cursor--;
         input_buf[input_len] = '\0';
-        putchar('\b');
+        redraw_input(prompt_cursor);
       }
     } else if (input_len < 255) {
-      putchar(c);
-      input_buf[input_len++] = c;
+      // Insert at input_cursor, not just append
+      for (int i = input_len; i > input_cursor; i--)
+        input_buf[i] = input_buf[i - 1];
+      input_buf[input_cursor] = (char)key;
+      input_len++;
+      input_cursor++;
+      redraw_input(prompt_cursor);
     }
   }
 }
