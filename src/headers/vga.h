@@ -17,9 +17,9 @@
 
 #include <stdint.h>
 
-static uint16_t* vga = (uint16_t*)0xB8000;
-static uint8_t color = 0x0F;
-static int cursor = 0;
+extern uint16_t* vga;
+extern uint8_t color;
+extern int cursor;
 
 // VGA text mode constants
 #define VGA_WIDTH  80

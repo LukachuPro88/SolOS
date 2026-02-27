@@ -11,6 +11,10 @@
 
 #include "headers/utils.h"  // inb / outb
 
+uint16_t* vga = (uint16_t*)0xB8000;
+uint8_t color = 0x0F;
+int cursor = 0;
+
 //-----------------------------------------
 // Internal helpers
 //-----------------------------------------
@@ -65,15 +69,17 @@ void enable_hw_cursor(uint8_t start, uint8_t end) {
 void putchar(unsigned char c) {
   if (c == '\n') {
     cursor += VGA_WIDTH - (cursor % VGA_WIDTH);
+  } else if (c == '\b') {
+    if (cursor > 0) {
+      cursor--;
+      vga[cursor] = (color << 8) | ' ';
+    }
   } else {
     vga[cursor] = (color << 8) | c;
     cursor++;
   }
 
-  if (cursor >= VGA_WIDTH * VGA_HEIGHT) {
-    scroll();
-  }
-
+  if (cursor >= VGA_WIDTH * VGA_HEIGHT) scroll();
   update_hw_cursor();
 }
 

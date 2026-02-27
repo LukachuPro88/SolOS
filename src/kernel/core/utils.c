@@ -21,6 +21,10 @@ void outb(uint16_t port, uint8_t value) {
     __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
+void outw(uint16_t port, uint16_t value) {
+    __asm__ volatile("outw %0, %1" : : "a"(value), "Nd"(port));
+}
+
 //-----------------------------------------
 // String utilities
 //-----------------------------------------
@@ -36,6 +40,16 @@ int strcmp(const char* a, const char* b) {
 // Pseudo-random number generator
 //-----------------------------------------
 static uint32_t seed = 12345;
+
+void srand(uint32_t new_seed) {
+    seed = new_seed;
+}
+
+uint32_t get_tsc(void) {
+    uint32_t lo;
+    __asm__ volatile("rdtsc" : "=a"(lo) : : "edx");
+    return lo;
+}
 
 uint32_t rand(void) {
     seed = seed * 1664525 + 1013904223;
