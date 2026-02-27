@@ -69,4 +69,4 @@ run: $(BUILD)/solos.img
 #-----------------------------------------
 # Clean build
 clean:
-	rm -rf $(BUILD)/*.o $(BUILD)/*.bin $(BUILD)/*.elf $(BUILD)/*.iso $(BUILD)/*.img
+	rm -rf $(BUILD)

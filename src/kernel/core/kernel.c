@@ -13,9 +13,12 @@
 //-----------------------------------------
 
 #include "headers/shell.h"
+#include "headers/utils.h"
 #include "headers/vga.h"
 
 void kernel_main(void) {
+  srand(get_tsc());
+
   clear_screen();
   print("SolOS v0.1 booted successfully.\n");
   print("Type 'help' for available commands.\n");
