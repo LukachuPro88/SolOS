@@ -13,6 +13,7 @@
 #include "headers/keyboard.h"
 
 #include <stdint.h>
+#include "headers/vga.h"
 
 static uint8_t shift = 0;
 
